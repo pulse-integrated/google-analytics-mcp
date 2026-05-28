@@ -219,26 +219,22 @@ Here are some sample prompts to get you started:
    uv sync
    ```
 
-4. **Get the OAuth client JSON.** If Pulse already created an OAuth client for the Google Ads MCP, you can reuse it — same GCP project, same client ID and secret work for both APIs. Otherwise:
-
-   - https://console.cloud.google.com/apis/credentials
-   - Create OAuth client → Application type: **Desktop app**
-   - Download the JSON file. Don't commit it.
-
-5. **Enable the two GA APIs** in the GCP project (one-time, only needs to be done by one teammate):
+4. **Enable the two GA APIs** in the GCP project (one-time, only needs to be done by one teammate):
 
    - https://console.cloud.google.com/apis/library/analyticsadmin.googleapis.com
    - https://console.cloud.google.com/apis/library/analyticsdata.googleapis.com
 
-6. **Run the credential setup helper:**
+5. **Run the credential setup helper:**
 
    ```bash
    uv run setup_credentials.py
    ```
 
-   It'll ask for the OAuth client JSON path, open a browser, and walk you through sign-in. Sign in with the Google account that has GA4 access. When done, the script prints the path to your ADC file (typically `~/.config/gcloud/application_default_credentials.json`).
+   The helper auto-detects the OAuth client credentials from the sibling Google Ads MCP setup (`~/Projects/mcp/googleads/google-ads.yaml`) if present, so no JSON download is needed when both MCPs share the same OAuth client. If the Ads yaml isn't there, the helper falls back to asking for an OAuth client JSON path — download one from https://console.cloud.google.com/apis/credentials (Desktop app type).
 
-7. **Register the MCP with Claude Code.** Open `~/.claude.json` and add the entry to your top-level `mcpServers` block (merge alongside any existing entries like `google-ads`):
+   The helper opens a browser. Sign in with the Google account that has GA4 access. When done, the script prints the path to your ADC file (typically `~/.config/gcloud/application_default_credentials.json`).
+
+6. **Register the MCP with Claude Code.** Open `~/.claude.json` and add the entry to your top-level `mcpServers` block (merge alongside any existing entries like `google-ads`):
 
    ```json
    {
@@ -260,9 +256,9 @@ Here are some sample prompts to get you started:
    }
    ```
 
-8. **Restart Claude Code** so the new MCP loads.
+7. **Restart Claude Code** so the new MCP loads.
 
-9. **Smoke test** from a terminal in the repo root:
+8. **Smoke test** from a terminal in the repo root:
 
    ```bash
    GOOGLE_APPLICATION_CREDENTIALS="$HOME/.config/gcloud/application_default_credentials.json" \

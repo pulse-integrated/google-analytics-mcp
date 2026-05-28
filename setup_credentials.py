@@ -1,20 +1,21 @@
 """Interactive helper to set up Google Analytics MCP credentials.
 
 This wraps `gcloud auth application-default login` with the right scopes,
-writes the OAuth client JSON to the repo root (gitignored), and prints the
-path you'll plug into `~/.claude.json` as GOOGLE_APPLICATION_CREDENTIALS.
+runs the browser sign-in, and prints the path you'll plug into
+`~/.claude.json` as GOOGLE_APPLICATION_CREDENTIALS.
 
-Two flows:
+The helper looks for OAuth client credentials in this priority order:
 
-  (1) Bring your own OAuth client JSON
-      You've already created a "Desktop app" OAuth client in Google Cloud
-      Console and downloaded the client JSON. Drop the path in when asked
-      and we use it for the browser sign-in.
+  (1) The sibling Google Ads MCP's google-ads.yaml
+      (~/Projects/mcp/googleads/google-ads.yaml). If found, reuses the
+      client_id and client_secret already in there — no JSON download
+      needed.
 
-  (2) Use existing ADC
-      You've already run `gcloud auth application-default login` previously
-      (maybe for another tool). Skip the auth flow and just point the MCP
-      at the existing ADC file.
+  (2) An OAuth client JSON file you downloaded from the Google Cloud
+      Console (APIs & Services -> Credentials -> Desktop app -> Download).
+
+  (3) Existing ADC: if you've already run gcloud auth previously, just
+      reuse it without touching anything.
 
 Run from the repo root:
     uv run setup_credentials.py
@@ -27,6 +28,7 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 
 
@@ -37,12 +39,39 @@ SCOPES = [
 DEFAULT_ADC_PATH = (
     Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
 )
+ADS_YAML_PATH = Path.home() / "Projects" / "mcp" / "googleads" / "google-ads.yaml"
 
 
 def ask(prompt: str, default: str | None = None) -> str:
     suffix = f" [{default}]" if default else ""
     value = input(f"{prompt}{suffix}: ").strip()
     return value or (default or "")
+
+
+def _client_json_from_ads_yaml() -> dict | None:
+    """If the sibling Ads MCP's yaml is present, build the OAuth client JSON
+    structure gcloud expects. Returns None if the yaml is missing or doesn't
+    contain the needed keys."""
+    if not ADS_YAML_PATH.is_file():
+        return None
+    try:
+        import yaml
+    except ImportError:
+        return None
+    data = yaml.safe_load(ADS_YAML_PATH.read_text()) or {}
+    client_id = data.get("client_id")
+    client_secret = data.get("client_secret")
+    if not client_id or not client_secret:
+        return None
+    return {
+        "installed": {
+            "client_id": client_id,
+            "client_secret": client_secret,
+            "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+            "token_uri": "https://oauth2.googleapis.com/token",
+            "redirect_uris": ["http://localhost"],
+        }
+    }
 
 
 def main() -> None:
@@ -60,23 +89,36 @@ def main() -> None:
             _verify_and_finish(DEFAULT_ADC_PATH)
             return
 
+    # Pick the OAuth client config — auto-detect from Ads yaml, or ask.
     print()
-    print("Step 1/3 — OAuth client JSON")
-    print("  Create at: https://console.cloud.google.com/apis/credentials")
-    print("  Type: 'Desktop app' (or 'Web app' with http://localhost redirect)")
-    print("  Then click 'Download JSON' and paste the file path below.")
-    print()
-    print("  If you already have the OAuth client we set up for Google Ads,")
-    print("  you can reuse that JSON here — same project, same client works.")
-    client_path = ask("Path to OAuth client JSON")
-    if not client_path or not Path(client_path).is_file():
-        print(f"ERROR: not a file: {client_path}")
-        sys.exit(1)
+    print("Step 1/3 — OAuth client")
+    ads_client_config = _client_json_from_ads_yaml()
+    tmp_client_path: Path | None = None
+    if ads_client_config:
+        print(f"  ✓ Detected OAuth client in {ADS_YAML_PATH}")
+        print("    Reusing it for the GA Analytics auth — no download needed.")
+        # Write a temp JSON file gcloud can read.
+        tmp = tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False, prefix="ga_oauth_client_"
+        )
+        json.dump(ads_client_config, tmp)
+        tmp.close()
+        tmp_client_path = Path(tmp.name)
+        client_path = str(tmp_client_path)
+    else:
+        print("  No Ads yaml found at the expected sibling path:")
+        print(f"    {ADS_YAML_PATH}")
+        print("  Fall back: provide an OAuth client JSON file path.")
+        print("  (Download from https://console.cloud.google.com/apis/credentials)")
+        client_path = ask("Path to OAuth client JSON")
+        if not client_path or not Path(client_path).is_file():
+            print(f"ERROR: not a file: {client_path}")
+            sys.exit(1)
 
     print()
     print("Step 2/3 — Enable required APIs in the Google Cloud project")
     print("  Open: https://console.cloud.google.com/apis/library")
-    print("  Search for and enable BOTH:")
+    print("  Search for and enable BOTH (one-time, only one teammate needs to):")
     print("    - Google Analytics Data API")
     print("    - Google Analytics Admin API")
     input("  Press Enter when both are enabled...")
@@ -95,8 +137,13 @@ def main() -> None:
         f"--scopes={','.join(SCOPES)}",
         f"--client-id-file={client_path}",
     ]
-    print(f"  Running: {' '.join(cmd)}\n")
+    print(f"  Running gcloud auth flow...\n")
     result = subprocess.run(cmd)
+
+    # Clean up the temp file regardless of success/failure.
+    if tmp_client_path and tmp_client_path.is_file():
+        tmp_client_path.unlink()
+
     if result.returncode != 0:
         print("ERROR: gcloud auth failed.")
         sys.exit(1)
