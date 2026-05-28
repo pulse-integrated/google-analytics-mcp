@@ -31,7 +31,6 @@ import sys
 import tempfile
 from pathlib import Path
 
-
 SCOPES = [
     "https://www.googleapis.com/auth/analytics.readonly",
     "https://www.googleapis.com/auth/cloud-platform",
@@ -39,7 +38,9 @@ SCOPES = [
 DEFAULT_ADC_PATH = (
     Path.home() / ".config" / "gcloud" / "application_default_credentials.json"
 )
-ADS_YAML_PATH = Path.home() / "Projects" / "mcp" / "googleads" / "google-ads.yaml"
+ADS_YAML_PATH = (
+    Path.home() / "Projects" / "mcp" / "googleads" / "google-ads.yaml"
+)
 
 
 def ask(prompt: str, default: str | None = None) -> str:
@@ -109,7 +110,9 @@ def main() -> None:
         print("  No Ads yaml found at the expected sibling path:")
         print(f"    {ADS_YAML_PATH}")
         print("  Fall back: provide an OAuth client JSON file path.")
-        print("  (Download from https://console.cloud.google.com/apis/credentials)")
+        print(
+            "  (Download from https://console.cloud.google.com/apis/credentials)"
+        )
         client_path = ask("Path to OAuth client JSON")
         if not client_path or not Path(client_path).is_file():
             print(f"ERROR: not a file: {client_path}")
@@ -118,7 +121,9 @@ def main() -> None:
     print()
     print("Step 2/3 — Enable required APIs in the Google Cloud project")
     print("  Open: https://console.cloud.google.com/apis/library")
-    print("  Search for and enable BOTH (one-time, only one teammate needs to):")
+    print(
+        "  Search for and enable BOTH (one-time, only one teammate needs to):"
+    )
     print("    - Google Analytics Data API")
     print("    - Google Analytics Admin API")
     input("  Press Enter when both are enabled...")
@@ -170,7 +175,9 @@ def _verify_and_finish(adc_path: Path) -> None:
     print("✓ ADC ready.")
     print(f"  Path: {adc_path}")
     print()
-    print("Plug this into ~/.claude.json under env.GOOGLE_APPLICATION_CREDENTIALS:")
+    print(
+        "Plug this into ~/.claude.json under env.GOOGLE_APPLICATION_CREDENTIALS:"
+    )
     print(f'  "GOOGLE_APPLICATION_CREDENTIALS": "{adc_path}"')
     print()
     print("Smoke test:")
@@ -178,7 +185,7 @@ def _verify_and_finish(adc_path: Path) -> None:
         '  GOOGLE_APPLICATION_CREDENTIALS="'
         + str(adc_path)
         + '" uv run python -c "from google.analytics.admin import '
-        'AnalyticsAdminServiceClient; c = AnalyticsAdminServiceClient(); '
+        "AnalyticsAdminServiceClient; c = AnalyticsAdminServiceClient(); "
         'print([a.account for a in c.list_account_summaries()])"'
     )
 
